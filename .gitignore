@@ -1,0 +1,22 @@
+# Database (large, rebuildable)
+index.db
+index.db-*
+
+# Tor hidden service keys (SECRET — never commit)
+tor-data/
+*.pid
+
+# Logs
+logs/
+
+# Crawl state (rebuildable)
+queue.txt
+crawled.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
+# System files
+lost+found/
+darksearch.service
