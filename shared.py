@@ -34,7 +34,7 @@ def search(query: str, limit: int = 50) -> list[dict]:
     db.row_factory = sqlite3.Row
     t0 = time.time()
     rows = db.execute('''
-        SELECT p.url, p.title, p.snippet, rank AS score
+        SELECT p.url, p.title, p.snippet, p.screenshot, rank AS score
         FROM pages_fts f
         JOIN pages p ON p.id = f.rowid
         WHERE pages_fts MATCH ?
@@ -45,6 +45,10 @@ def search(query: str, limit: int = 50) -> list[dict]:
     total = db.execute('SELECT COUNT(*) FROM pages').fetchone()[0]
     db.close()
     results = [dict(r) for r in rows]
+    # Add full S3 URL for screenshots
+    for r in results:
+        if r.get('screenshot'):
+            r['screenshot_url'] = f'https://threat-intel-raw-dumps.s3.us-east-2.amazonaws.com/{r["screenshot"]}'
     return {
         'results': results,
         'total_indexed': total,
@@ -125,11 +129,28 @@ def feed_seeds_from_onionclaw(search_results: list[dict]) -> int:
 # 3. CHANGE DETECTION — re-crawl existing pages, flag diffs
 # ═══════════════════════════════════════════════
 
-def check_for_changes(age_hours: int = 24, min_content_length: int = 200) -> list[dict]:
-    """Re-crawl pages last seen more than N hours ago.
-    Returns list of pages with significant content changes.
+# Tiered re-crawl: priority pages checked more frequently
+# Tier 1: ransomware + leak_site → every 3 hours (victims appear mid-day)
+# Tier 2: forum + paste → every 12 hours (moderate churn)
+# Tier 3: marketplace, directory, uncategorized → every 24 hours (rarely changes)
+TIER_CONFIG = {
+    1: {'categories': ['ransomware', 'leak_site'], 'age_hours': 3,  'max_per_run': 200},
+    2: {'categories': ['forum', 'paste'],               'age_hours': 12, 'max_per_run': 100},
+    3: {'categories': ['marketplace', 'directory', 'financial', 'drugs', 'porn',
+                        'hosting', 'email', 'tools', 'uncategorized'],
+         'age_hours': 24, 'max_per_run': 150},
+}
 
-    Each result: {url, title, old_snippet, new_snippet, change_ratio, checked_at}
+
+def check_for_changes(tier: int = None, min_content_length: int = 200) -> list[dict]:
+    """Re-crawl existing pages with tiered priority.
+    
+    Args:
+        tier: 1 (ransomware/leak_site), 2 (forum/paste), 3 (everything else), or None (all tiers)
+        min_content_length: minimum page content to consider
+    
+    Returns list of pages with significant content changes.
+    Each result: {url, title, old_snippet, new_snippet, change_ratio, checked_at, tier}
     """
     import requests
     from bs4 import BeautifulSoup
@@ -137,69 +158,89 @@ def check_for_changes(age_hours: int = 24, min_content_length: int = 200) -> lis
     db = sqlite3.connect(str(DB_PATH))
     db.row_factory = sqlite3.Row
 
-    cutoff = (datetime.now() - __import__('datetime').timedelta(hours=age_hours)).isoformat()
-    rows = db.execute(
-        'SELECT url, title, snippet, body FROM pages WHERE crawled_at < ? ORDER BY crawled_at ASC LIMIT 100',
-        (cutoff,)
-    ).fetchall()
+    tiers_to_check = [tier] if tier else [1, 2, 3]
+    all_changes = []
 
-    if not rows:
-        db.close()
-        return []
+    for t in tiers_to_check:
+        config = TIER_CONFIG.get(t)
+        if not config:
+            continue
 
-    session = requests.Session()
-    session.proxies = {'http': 'socks5h://127.0.0.1:9050', 'https': 'socks5h://127.0.0.1:9050'}
-    session.headers.update({'User-Agent': 'Mozilla/5.0'})
+        cutoff = (datetime.now() - __import__('datetime').timedelta(hours=config['age_hours'])).isoformat()
+        
+        # Build category filter: pages matching any of this tier's categories
+        cat_clauses = ' OR '.join([f"categories LIKE '%{c}%'" for c in config['categories']])
+        sql = f'''
+            SELECT url, title, snippet, body, categories
+            FROM pages 
+            WHERE crawled_at < ? 
+            AND ({cat_clauses})
+            ORDER BY crawled_at ASC 
+            LIMIT ?
+        '''
+        rows = db.execute(sql, (cutoff, config['max_per_run'])).fetchall()
 
-    changes = []
-    for row in rows:
-        try:
-            resp = session.get(row['url'], timeout=25)
-            if resp.status_code != 200:
-                continue
+        if not rows:
+            continue
 
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            for tag in soup(['script', 'style', 'nav', 'footer']):
-                tag.decompose()
-            new_body = ' '.join(soup.get_text(separator=' ', strip=True).split())[:64000]
+        session = requests.Session()
+        session.proxies = {'http': 'socks5h://127.0.0.1:9050', 'https': 'socks5h://127.0.0.1:9050'}
+        session.headers.update({'User-Agent': 'Mozilla/5.0'})
 
-            if len(new_body) < min_content_length:
-                continue
+        for row in rows:
+            try:
+                resp = session.get(row['url'], timeout=25)
+                if resp.status_code != 200:
+                    continue
 
-            new_hash = hashlib.md5(new_body.encode()).hexdigest()
-            old_hash = hashlib.md5((row['body'] or '').encode()).hexdigest()
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                for tag in soup(['script', 'style', 'nav', 'footer']):
+                    tag.decompose()
+                new_body = ' '.join(soup.get_text(separator=' ', strip=True).split())[:64000]
 
-            if new_hash != old_hash:
-                # Calculate how much changed
+                if len(new_body) < min_content_length:
+                    continue
+
+                new_hash = hashlib.md5(new_body.encode()).hexdigest()
+                old_hash = hashlib.md5((row['body'] or '').encode()).hexdigest()
+
+                if new_hash == old_hash:
+                    # Content unchanged — update crawled_at so we don't re-check it immediately
+                    db.execute('UPDATE pages SET crawled_at=CURRENT_TIMESTAMP WHERE url=?', (row['url'],))
+                    time.sleep(1)
+                    continue
+
                 old_len = len(row['body'] or '')
                 new_len = len(new_body)
                 ratio = abs(new_len - old_len) / max(old_len, 1)
 
-                changes.append({
+                all_changes.append({
                     'url': row['url'],
                     'title': row['title'],
+                    'categories': row['categories'],
                     'old_snippet': (row['snippet'] or '')[:200],
                     'new_snippet': new_body[:200],
                     'change_ratio': round(ratio, 3),
                     'checked_at': datetime.now().isoformat(),
+                    'tier': t,
                 })
 
-                # Update the page in index
+                # Update the page in index with new content
                 new_title = soup.title.string.strip() if soup.title else row['title']
                 db.execute(
                     'UPDATE pages SET title=?, body=?, snippet=?, crawled_at=CURRENT_TIMESTAMP WHERE url=?',
                     (new_title, new_body, new_body[:300], row['url'])
                 )
 
-            time.sleep(2)
+                time.sleep(2)
 
-        except Exception:
-            time.sleep(2)
-            continue
+            except Exception:
+                time.sleep(2)
+                continue
 
     db.commit()
     db.close()
-    return changes
+    return all_changes
 
 
 # ═══════════════════════════════════════════════
