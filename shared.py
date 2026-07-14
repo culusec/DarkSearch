@@ -243,6 +243,60 @@ def check_for_changes(tier: int = None, min_content_length: int = 200) -> list[d
     return all_changes
 
 
+# ── CSAM CONTENT FILTER ─────────────────────────────────────
+# Pages matching these terms are BLOCKED from indexing.
+# Aggressive: blocks porn/NSFW/adult content in addition to CSAM.
+# Uses word-boundary matching so 'pre' flags "pre teen" but not "prepaid".
+
+CSAM_BLOCKLIST = [
+    # Direct CSAM terms (substring match — these are unambiguous)
+    'child porn', 'child pornography', 'preteen', 'pedo', 'pedophile',
+    'lolita', 'pthc', 'ptsc', 'hussyfan', 'child model', 'underage',
+    'jailbait', 'teen model', 'young girl', 'young boy', 'toddler',
+    'kindergarten', 'nursery', 'diaper', 'pacifier',
+    'nudism', 'naturist', 'family nudism',
+    'hard candy', 'cheese pizza', 'cp company',
+    'boy lover', 'girl lover', 'child lover',
+    'years old nude', 'years old naked', 'years old sex',
+    'pedo empire', 'pedo world',
+]
+
+# Broad age terms — ONLY flag if the page ALSO contains sexual keywords.
+# Word-boundary matching prevents 'pre' from matching "prepaid", "premium", etc.
+import re as _re
+
+_CSAM_BROAD_PATTERNS = [
+    r'\bkids?\b', r'\bchild(ren)?\b', r'\bteen(s|age)?\b',
+    r'\bboy(s|hood)?\b', r'\bgirl(s|hood)?\b',
+    r'\bpre\b', r'\byoung\b', r'\bunderage\b',
+]
+
+_CSAM_SEXUAL_PATTERNS = [
+    r'\bnude\b', r'\bnaked\b', r'\bsex(ual)?\b',
+    r'\bporn\b', r'\bxxx\b', r'\bhardcore\b', r'\berotic\b',
+    r'\bescort\b', r'\bprostitute\b', r'\bintercourse\b',
+]
+
+_BROAD_RE = _re.compile('|'.join(_CSAM_BROAD_PATTERNS), _re.IGNORECASE)
+_SEXUAL_RE = _re.compile('|'.join(_CSAM_SEXUAL_PATTERNS), _re.IGNORECASE)
+
+
+def is_csam(title: str, body: str) -> bool:
+    """Check page content for CSAM/porn. Returns True to BLOCK indexing."""
+    text = f"{title or ''} {body or ''}".lower()
+    
+    # Direct hits — immediate block
+    for term in CSAM_BLOCKLIST:
+        if term in text:
+            return True
+    
+    # Broad age term + sexual term combination — word boundary matched
+    if _BROAD_RE.search(text) and _SEXUAL_RE.search(text):
+        return True
+    
+    return False
+
+
 # ═══════════════════════════════════════════════
 # 4. CATEGORY TAGGING — classify pages during indexing
 # ═══════════════════════════════════════════════
@@ -263,7 +317,7 @@ CATEGORIES = {
                   'paypal', 'cashapp', 'venmo', 'fullz', 'carding', 'cashing out'],
     'drugs': ['cannabis', 'cocaine', 'mdma', 'lsd', 'xanax', 'prescription', 'pill',
               'ship', 'stealth', 'domestic', 'international', 'narcotic'],
-    'porn': ['porn', 'adult', 'nsfw', 'xxx', 'premium', 'onlyfans', 'nude', 'teen',
+    'porn': ['porn', 'adult', 'nsfw', 'xxx', 'premium', 'onlyfans', 'nude',
              'cam', 'hardcore', 'video', 'photo set'],
     'hosting': ['vps', 'hosting', 'server', 'bulletproof', 'anonymous hosting', 'domain',
                 'offshore', 'no logs', 'dmca', 'web hosting'],
