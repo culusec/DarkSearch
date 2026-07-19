@@ -9,10 +9,10 @@ SICRY="/home/kplat/.pi/agent/skills/onionclaw/sicry.py"
 # Rotate through 4 keyword batches based on hour
 HOUR=$(date +%H)
 case $((HOUR % 24)) in
-    0|1|2|3|4|5)   TERMS=("onion directory links" "hidden wiki tor" "darknet market forum" "ransomware leak site" "bitcoin mixer") ;;
-    6|7|8|9|10|11)  TERMS=("darknet hosting service" "encrypted email onion" "darknet paste dump" "hacking forum community" "secure messaging onion") ;;
-    12|13|14|15|16|17) TERMS=("exploit tools malware" "ddos booter service" "credit card dumps cvv" "bank account transfer onion" "drugs shipping stealth") ;;
-    18|19|20|21|22|23) TERMS=("porn adult video onion" "library books archive onion" "whistleblower leak submit" "cryptocurrency exchange onion" "vpn proxy service onion") ;;
+    0|1|2|3|4|5)   TERMS=("onion directory links 2026" "darknet market forum" "ransomware leak site onion" "initial access broker darknet" "exploit zero day sell") ;;
+    6|7|8|9|10|11)  TERMS=("darknet hosting service" "encrypted email onion" "hacking forum community" "crypto drainer script" "AI jailbreak darknet") ;;
+    12|13|14|15|16|17) TERMS=("stolen data marketplace" "botnet c2 panel onion" "carding cvv dumps forum" "bank wire fraud method" "sim swap service onion") ;;
+    18|19|20|21|22|23) TERMS=("deepfake generator onion" "cloud credential leak" "wallet cracker tool" "supply chain exploit" "ransomware affiliate program") ;;
 esac
 
 TOTAL=0
@@ -35,6 +35,7 @@ for term in "${TERMS[@]}"; do
 import sys, importlib.util
 spec = importlib.util.spec_from_file_location('sicry', '$SICRY')
 sicry = importlib.util.module_from_spec(spec)
+sys.modules['sicry'] = sicry
 spec.loader.exec_module(sicry)
 
 existing = set()

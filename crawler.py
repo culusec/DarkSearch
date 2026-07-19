@@ -42,6 +42,13 @@ SCREENSHOT_CATEGORIES = {'ransomware', 'leak_site'}
 # ── CSAM FILTER ──────────────────────────────────────────────
 # Aggressive: blocks CSAM + porn/NSFW. Word-boundary matching
 # prevents false positives like 'pre' matching "prepaid".
+
+# Safe domains — legitimate services that discuss CSAM filtering
+CSAM_SAFELIST = [
+    'juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd',  # Ahmia onion
+    'ahmia.fi',
+]
+
 CSAM_BLOCKLIST = [
     'child porn', 'child pornography', 'preteen', 'pedo', 'pedophile',
     'lolita', 'pthc', 'ptsc', 'hussyfan', 'child model', 'underage',
@@ -69,8 +76,13 @@ _SEXUAL_PATTERNS = [
 _BROAD_RE = _re.compile('|'.join(_BROAD_PATTERNS), _re.IGNORECASE)
 _SEXUAL_RE = _re.compile('|'.join(_SEXUAL_PATTERNS), _re.IGNORECASE)
 
-def is_csam(title: str, body: str) -> bool:
+def is_csam(title: str, body: str, url: str = '') -> bool:
     """Check page content for CSAM/porn. Returns True to BLOCK indexing."""
+    # Safe domains — never block
+    for safe in CSAM_SAFELIST:
+        if safe in url:
+            return False
+    
     text = f"{title or ''} {body or ''}".lower()
     for term in CSAM_BLOCKLIST:
         if term in text:
@@ -82,6 +94,8 @@ def is_csam(title: str, body: str) -> bool:
 
 def get_db():
     conn = sqlite3.connect(str(DB_PATH))
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA wal_autocheckpoint=100')
     conn.execute('''CREATE TABLE IF NOT EXISTS pages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         url TEXT UNIQUE,
@@ -194,15 +208,140 @@ _HARVEST_KEYWORD_POOLS = [
     ['darknet paste', 'tor pastebin', 'onion paste dump', 'anonymous text paste', 'dark web forum', 'tor chat room'],
     ['counterfeit money onion', 'fake id documents', 'passport template darknet', 'buy cc dumps', 'bank login onion', 'paypal transfer darknet'],
     ['drug market onion', 'cannabis delivery tor', 'prescription pills darknet', 'mdma lsd vendor', 'steroids shop onion'],
+    # Fresh pools — 2026-07-17
+    ['initial access broker', 'ransomware affiliate panel', 'data extortion blog', 'leak site mirror', 'ransomware negotiation chat', 'stolen data marketplace'],
+    ['AI jailbreak prompt', 'chatgpt exploit darknet', 'deepfake generator onion', 'voice clone service', 'AI hacking tool', 'LLM prompt injection'],
+    ['api key leak', 'cloud credential dump', 'aws access key', 'azure tenant hack', 's3 bucket leak', 'terraform state exposure'],
+    ['sim swap service', 'telegram account hack', 'whatsapp spy tool', 'signal intercept', 'sms redirection', 'phone number lookup darknet'],
+    ['crypto drainer script', 'nft scam template', 'wallet cracker tool', 'ethereum private key', 'solana drainer', 'metamask seed phrase'],
+    ['supply chain attack', 'software backdoor', 'zero day exploit sell', 'vulnerability broker', 'exploit chain forum', 'cve exploit code'],
+    ['bank wire transfer', 'ach fraud method', 'check kiting tutorial', 'money mule recruitment', 'drop account service', 'emi account opening'],
+    ['dark web news 2026', 'onion site update', 'hidden service launch', 'tor project news', 'darknet bust arrest', 'exit scam warning'],
+    # Fresh pools — 2026-07-18 (discovery, credentials, exploits, platform footprints)
+    ['onion list v3', 'active mirrors tor', 'tor link list 2026', 'dark web directory links', 'hidden service onion', 'onion service index'],
+    ['combo list dump', 'email password leak', 'stealer logs onion', 'fullz dump forum', 'login combo database', 'credential stuffing target'],
+    ['0day exploit sell', 'cve exploit code 2026', 'rce payload onion', 'malware source code leak', 'ransomware payload builder', 'red tearm c2 framework'],
+    ['rdp access sell', 'vpn logs compromised', 'server root access', 'citrix access broker', 'backdoor shell access', 'corporate network access'],
+    ['.env leak database', 'config file exposure', 'aws keys leaked', 'api keys dump', 'private ssh key leak', 'cloud credential github'],
+    ['autoshop carding', 'cloned cards vendor', 'cvv shop onion', 'bank logs market', 'carding forum 2026', 'paypal logs shop'],
+    ['fake passport template', 'counterfeit cash onion', 'cloned bills vendor', 'scam kit phishing', 'phishing template darknet', 'novelty id documents'],
+    ['btc wallet cracker', 'xmr address lookup', 'crypto mixer onion', 'bitcoin tumbler service', 'coinjoin implementation', 'monero exchange anonymous'],
+    ['powered by vbulletin onion', 'xenforo forum darknet', 'phpbb hidden service', 'mybb dark web', 'simple machines forum tor', 'discourse onion site'],
+    # Forum & community names — 2026-07-18
+    ['Dread forum onion', 'XSS forum darknet', 'Exploit.in tor', 'Endchan onion', 'cryptbb dark web', 'SuprBay forum onion'],
+    ['index.php forum tor', 'viewforum.php onion', 'register account darknet', 'captcha tor forum', 'pgp key required', 'invite code onion'],
+    # Active marketplace names & patterns
+    ['TorZon market onion', 'BriansClub onion', 'Russian Market darknet', 'WeTheNorth market tor', 'Abacus market onion', 'Archetyp market darknet'],
+    ['escrow service tor', 'vendor panel onion', 'wallet balance darknet', 'dispute resolution market', 'Monero accepted', 'XMR multisig'],
+    ['multisig escrow onion', 'BTC wallet darknet', 'finalize early', 'FE allowed market', 'trusted vendor tor', 'verified seller onion'],
+    # Privacy, dev & whistleblowing
+    ['SecureDrop onion', 'leak submission tor', 'anonymous tip darknet', 'whistleblower submit', 'onion mirror site', 'Gitea hidden service'],
+    ['XMPP server onion', 'Matrix bridge tor', 'censorship circumvention', 'samizdat darknet', 'monero node onion', 'tor relay operator'],
 ]
+
+# Broad search terms — used when keyword pools are exhausted
+# Queries Torch directly for .onion links (no OnionClaw dependency)
+_BROAD_SEARCH_TERMS = [
+    'breach', 'hack', 'leak', 'dump', 'database', 'stolen', 'ransomware',
+    'exploit', 'malware', 'botnet', 'phishing', 'spyware', 'trojan', 'rootkit',
+    'bitcoin', 'monero', 'wallet', 'crypto', 'exchange', 'mixer', 'tumbler',
+    'forum', 'market', 'shop', 'vendor', 'escrow', 'carding', 'cvv', 'fullz',
+    'passport', 'id card', 'driver license', 'ssn', 'credit card', 'bank account',
+    'paypal', 'western union', 'transfer', 'cashapp', 'venmo', 'money',
+    'drugs', 'cannabis', 'cocaine', 'mdma', 'lsd', 'xanax', 'pills', 'steroids',
+    'hosting', 'vps', 'server', 'domain', 'bulletproof', 'offshore', 'anonymous',
+    'email', 'protonmail', 'tutanota', 'encrypted', 'secure', 'private',
+    'vpn', 'proxy', 'tor', 'onion', 'darknet', 'darkweb', 'hidden',
+    'wiki', 'directory', 'links', 'list', 'index', 'catalog',
+    'counterfeit', 'fake', 'cloned', 'prepaid', 'gift card', 'coupon',
+    'weapon', 'gun', 'ammo', 'knife', 'self defense',
+    'porn', 'adult', 'nsfw', 'escort', 'dating', 'sex',
+    'gambling', 'casino', 'betting', 'poker', 'slots', 'lottery',
+    'ebook', 'pdf', 'book', 'library', 'document', 'archive', 'research',
+    'music', 'movie', 'video', 'streaming', 'download', 'torrent',
+    'news', 'blog', 'journal', 'article', 'media', 'press',
+    'chat', 'messaging', 'jabber', 'xmpp', 'irc', 'telegram', 'signal',
+    'file', 'upload', 'share', 'cloud', 'storage', 'backup',
+    'search engine', 'crawler', 'scraper', 'spider',
+    # Fresh batch — more specific and varied
+    'stolen data', 'data leak', 'leaked database', 'breach database',
+    'hacked database', 'dump database', 'company leak', 'corporate leak',
+    'credential leak', 'password dump', 'email leak', 'combo list',
+    'buy account', 'sell account', 'bank log', 'paypal log',
+    'rdp shop', 'socks proxy', 'cpanel shell', 'smtp access',
+    'scan result', 'vulnerability', '0day exploit', 'zero day',
+    'keylogger', 'stealer log', 'redline log', 'vidar log', 'raccoon log',
+    'ransomware victim', 'ransom demand', 'decrypt tool', 'decryptor',
+    'darknet news', 'deep web', 'hidden service', 'onion service',
+    'anonymous market', 'dark market', 'underground forum',
+    'hacker group', 'hacking team', 'pentest tool', 'red team',
+    'bitcoin wallet', 'ethereum wallet', 'crypto wallet', 'private key',
+    'seed phrase', 'mnemonic', 'recovery phrase', 'brain wallet',
+    'counterfeit money', 'fake passport', 'fake driver license',
+    'credit card dumps', 'track1 track2', 'pin code', 'atm skimmer',
+    'western union transfer', 'moneygram', 'ria transfer',
+    'bulletproof hosting', 'anonymous vps', 'offshore hosting',
+    'no logs vpn', 'anonymous proxy', 'socks5 proxy',
+    'tor bridge', 'tor relay', 'obfs4', 'meek',
+    'pgp key', 'gpg key', 'encrypted message', 'private message',
+    'darknet bible', 'tor guide', 'opsec guide', 'security guide',
+    'hacking tutorial', 'carding tutorial', 'fraud tutorial',
+    'cashout method', 'money laundering', 'bitcoin tumbler',
+    'monero mixer', 'crypto mixer', 'coinjoin',
+    'fake id template', 'novelty id', 'scannable id',
+    'fullz info', 'background check', 'credit report',
+    'osint tool', 'dox tool', 'people search',
+    'sim swap', 'phone clone', 'sms bypass', '2fa bypass',
+    'ransomware builder', 'crypter service', 'fud crypter',
+    'malware panel', 'c2 panel', 'bot admin panel',
+    'spam tool', 'mailer tool', 'sms bomber', 'call bomber',
+    'ddos attack', 'stress test', 'booter service',
+    'sql injection', 'xss payload', 'web shell', 'backdoor',
+    'reverse shell', 'bind shell', 'meterpreter', 'empire agent',
+    'phishing kit', 'scam page', 'cloning script',
+    'bank drop', 'money mule', 'cashout service',
+    'bitcoin doubler', 'crypto doubler', 'investment scam',
+    'ponzi scheme', 'hyip script', 'mlm script',
+    'darknet market link', 'darknet shop', 'darknet store',
+    'verified vendor', 'trusted seller', 'escrow service',
+    'bitcoin escrow', 'multisig escrow', 'p2p exchange',
+    'anonymous chat', 'private forum', 'invite only',
+    'referral code', 'affiliate program', 'commission',
+    'free sample', 'test order', 'trial offer',
+    'dropshipping', 'reseller program', 'wholesale',
+    'bitcoin atm', 'crypto exchange', 'localbitcoins',
+    'paypal account', 'stripe account', 'square account',
+    'bank account', 'emi account', 'payment processor',
+    'aged account', 'verified account', 'business account',
+    'stealth account', 'shadow account', 'anonymous account',
+    # Fresh broad terms — 2026-07-18
+    'breached data', 'database dump', 'leaked database', 'combo list', 'email list',
+    'password dump', 'login combo', 'fullz dump', 'stealer logs', 'infostealer',
+    'rdp access', 'vpn logs', 'server root', 'citrix access', 'shell access',
+    '.env leak', 'config file', 'aws keys', 'api keys', 'private ssh key',
+    'cloned cards', 'cvv shop', 'bank logs', 'carding forum', 'paypal logs',
+    'fake passport', 'counterfeit cash', 'cloned bills', 'scam kit', 'phishing template',
+    'btc wallet', 'xmr address', 'crypto mixer', 'bitcoin tumbler', 'coinjoin',
+    'vbulletin', 'xenforo', 'phpbb', 'mybb', 'discourse onion',
+    'ransomware payload', 'malware source', '0day exploit', 'rce payload',
+    'cve exploit', 'backdoor access', 'c2 panel', 'red team tool',
+    # Forum & marketplace names — 2026-07-18
+    'Dread forum', 'XSS forum', 'Exploit.in', 'Endchan', 'cryptbb', 'SuprBay',
+    'TorZon', 'BriansClub', 'Russian Market', 'WeTheNorth', 'Abacus market', 'Archetyp',
+    'escrow service', 'vendor panel', 'multisig', 'Monero XMR', 'finalize early',
+    'SecureDrop', 'Gitea onion', 'XMPP server', 'Matrix bridge', 'samizdat',
+    'index.php', 'viewforum.php', 'register account', 'pgp key', 'invite code',
+]
+
 _harvest_pool_idx = 0
+_broad_search_idx = 0
 
 def harvest_seeds(keywords: list[str] = None) -> int:
     """Use OnionClaw/sicry to search for new .onion URLs and feed them into the queue.
-    Also directly fetches known directory/link-list pages to extract fresh seeds.
+    Also directly scrapes Torch search results when keyword pools are stale.
     Filters out already-crawled URLs. Rotates keyword pools.
     Returns number of genuinely new seeds added."""
-    global _harvest_pool_idx
+    global _harvest_pool_idx, _broad_search_idx
     
     if keywords is None:
         keywords = _HARVEST_KEYWORD_POOLS[_harvest_pool_idx % len(_HARVEST_KEYWORD_POOLS)]
@@ -216,7 +355,7 @@ def harvest_seeds(keywords: list[str] = None) -> int:
     for kw in keywords[:5]:
         try:
             import sicry
-            results = sicry.search(kw, max_results=15, engines=['Ahmia-clearnet', 'Tor66', 'Excavator', 'OnionLand', 'TheDeepSearches'])
+            results = sicry.search(kw, max_results=15, engines=['Ahmia-clearnet', 'Ahmia', 'Tor66', 'Excavator', 'OnionLand', 'TheDeepSearches', 'Amnesia', 'Torland', 'Onionway', 'Torgol', 'DuckDuckGo-Tor', 'OSS'])
             for r in results:
                 url = r.get('url', '') or r.get('link', '')
                 if '.onion' in url and url not in existing and url not in crawled:
@@ -230,19 +369,42 @@ def harvest_seeds(keywords: list[str] = None) -> int:
         time.sleep(3)
     
     # Method 2: Directly scrape directory/link-list pages for fresh links
-    # These are high-value seed pages with hundreds of .onion links each
     DIRECTORY_SEEDS = [
-        'http://deeeepv4bfndyatwkdzeciebqcwwlvgqa6mofdtsvwpon4elfut7lfqd.onion/',  # DeepLink
-        'http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/',  # Tordex
-        'http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/',  # Tor66
+        'http://deeeepv4bfndyatwkdzeciebqcwwlvgqa6mofdtsvwpon4elfut7lfqd.onion/',
+        'http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/',
+        'http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/',
+        # Fresh directory seeds — added 2026-07-17
+        'http://darkfailenbsdla5mal2mxn2uz66od5vtzd5qozslagrfzachha3f3id.onion/',
+        'http://phobosxilamwcg75xt22id7aywkzol6q6rfl2flipcqoc4e4ahima5id.onion/',
+        'http://onionlnqbvsmi2p2x7jmxwvfparu7bdhpsjeyustp3h7hgtlldhhtyqd.onion/',
+        'http://6nhmgdpnyoljh5uzr5kwlatx2u3diou4ldeommfxjz3wkhalzgjqxzqd.onion/',
+        'http://2fd6cemt4gmbyflmiu5m4lctdqnvm7zanaassnj3w4vekvp5qp4zbyad.onion/',
+        'http://jgwe5cjqdbyrumglkqniu5cwfakox8er6lyuafcuibknu7xye4wrf6qd.onion/',
+        'http://n3hdukibtwvrxkzvihn3w2iubqb6cpjq5iy3me6qevwcqnreav2ixhqd.onion/',
+        'http://linksmybq3cz6cgheo5tdnlprfiog3vcf25p7g64eadkpngeco6qtiid.onion/',
+        'http://visitorfi5kl7q7ei56t2ngx2n3yoqafezk4ugjccv6sho7p6gg2eekqd.onion/',
+        # Hidden Wiki mirrors + OnionLand — 2026-07-18
+        'http://zqktlwiuavvvqqt4ybvgvi7tyo4hjl5xgfuvpdf6otjiycgwqbym2qad.onion/wiki/index.php',
+        'http://6nhmgdpnyoljh5uzr5kwlatx2u3diou4ldeommfxjz3wkhalzgjqxzqd.onion/index.php',
+        'http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/',
+        'http://wikitjerrta4qgz4pi3hm36fmkbmrhwfuk3bmguk2y7xypan2w3pnoyd.onion/',
+        'http://wiki6dtqpuvwtc5hopuj33eeavwa6sik7sy57cor35chkx5nrbmmolqd.onion/',
+        # Clearnet sources that list onions (scraped via Tor exit or direct)
+        'https://raw.githubusercontent.com/alecmuffett/real-world-onion-sites/main/README.md',
+        'https://raw.githubusercontent.com/onionltd/onion-sites-list/main/onion-sites.md',
     ]
     try:
-        session = requests.Session()
-        session.proxies = {'http': 'socks5h://127.0.0.1:9050', 'https': 'socks5h://127.0.0.1:9050'}
-        session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:115.0) Gecko/20100101 Firefox/115.0'})
+        # Tor session for .onion URLs
+        tor_session = requests.Session()
+        tor_session.proxies = {'http': 'socks5h://127.0.0.1:9050', 'https': 'socks5h://127.0.0.1:9050'}
+        tor_session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:115.0) Gecko/20100101 Firefox/115.0'})
+        # Clearnet session for GitHub etc.
+        clear_session = requests.Session()
+        clear_session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:115.0) Gecko/20100101 Firefox/115.0'})
         for seed_url in DIRECTORY_SEEDS:
             try:
-                resp = session.get(seed_url, timeout=25)
+                s = clear_session if seed_url.startswith('https://') else tor_session
+                resp = s.get(seed_url, timeout=25)
                 if resp.status_code == 200:
                     links = extract_links(resp.text, seed_url)
                     for link in links:
@@ -258,6 +420,59 @@ def harvest_seeds(keywords: list[str] = None) -> int:
         session.close()
     except Exception:
         pass
+    
+    # Method 3: Broad search — queries Torch AND Ahmia directly with rotating terms
+    # Kicks in when methods 1 and 2 return nothing (pool exhausted)
+    if added == 0:
+        batch = []
+        for _ in range(5):
+            term = _BROAD_SEARCH_TERMS[_broad_search_idx % len(_BROAD_SEARCH_TERMS)]
+            _broad_search_idx += 1
+            batch.append(term)
+        
+        try:
+            session = requests.Session()
+            session.proxies = {'http': 'socks5h://127.0.0.1:9050', 'https': 'socks5h://127.0.0.1:9050'}
+            session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:115.0) Gecko/20100101 Firefox/115.0'})
+            for term in batch:
+                # Search Torch
+                try:
+                    torch_url = f'http://torchdeedp3i2jigzjdmfpn5ttjhthh5wbmda2rr3jvqjg5p77c54dqd.onion/search?query={term}'
+                    resp = session.get(torch_url, timeout=30)
+                    if resp.status_code == 200:
+                        links = extract_links(resp.text, torch_url)
+                        for link in links:
+                            if link not in existing and link not in crawled:
+                                save_line(QUEUE_PATH, link)
+                                existing.add(link)
+                                crawled.add(link)
+                                added += 1
+                except Exception:
+                    continue
+                time.sleep(2)
+                
+                # Search Ahmia onion
+                try:
+                    ahmia_url = f'http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={term}'
+                    resp = session.get(ahmia_url, timeout=30)
+                    if resp.status_code == 200:
+                        links = extract_links(resp.text, ahmia_url)
+                        # Filter out Ahmia's own navigation pages
+                        ahmia_domain = 'juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd'
+                        for link in links:
+                            if ahmia_domain in link:  # skip Ahmia's own pages
+                                continue
+                            if link not in existing and link not in crawled:
+                                save_line(QUEUE_PATH, link)
+                                existing.add(link)
+                                crawled.add(link)
+                                added += 1
+                except Exception:
+                    continue
+                time.sleep(2)
+            session.close()
+        except Exception:
+            pass
     
     return added
 
@@ -443,7 +658,7 @@ def main():
                     continue
                 
                 # ── CSAM CHECK ──
-                if is_csam(title, body):
+                if is_csam(title, body, url):
                     log(f'  -> CSAM BLOCKED')
                     cycle_csam += 1
                     total_skipped_csam += 1
@@ -465,6 +680,20 @@ def main():
                     if ss:
                         db.execute('UPDATE pages SET screenshot=? WHERE url=?', (ss, url))
                         db.commit()
+                
+                # ── Extract CVEs from page content ──
+                try:
+                    sys.path.insert(0, '/mnt/threat_intel/scripts')
+                    from cve_extract import extract_and_store
+                    from zeroday_extract import extract_and_store as extract_zd
+                    page_text = title + ' ' + body
+                    cves = extract_and_store(page_text, source='darkweb_crawl', source_url=url)
+                    if cves:
+                        log(f'  🔓 CVEs: {", ".join(cves[:5])}')
+                    if extract_zd(page_text, source='darkweb_crawl', source_url=url):
+                        log(f'  🚨 Zero-day signal detected')
+                except Exception:
+                    pass
                 
                 # ── Bridge to collect.py: feed leak_site URLs to dump download queue ──
                 if 'leak_site' in categories:

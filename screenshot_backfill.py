@@ -75,6 +75,7 @@ def main():
             limit = int(sys.argv[i + 1])
     
     db = sqlite3.connect(str(DB_PATH))
+    db.execute('PRAGMA journal_mode=WAL')
     
     # Add screenshot column if missing
     cols = [c[1] for c in db.execute('PRAGMA table_info(pages)').fetchall()]

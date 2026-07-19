@@ -31,6 +31,7 @@ def search(query: str, limit: int = 50) -> list[dict]:
     Returns list of dicts: {url, title, snippet, score}
     """
     db = sqlite3.connect(str(DB_PATH))
+    db.execute('PRAGMA journal_mode=WAL')
     db.row_factory = sqlite3.Row
     t0 = time.time()
     rows = db.execute('''
@@ -60,6 +61,7 @@ def search(query: str, limit: int = 50) -> list[dict]:
 def stats() -> dict:
     """Quick stats: how many pages, unique sites, last crawl time."""
     db = sqlite3.connect(str(DB_PATH))
+    db.execute('PRAGMA journal_mode=WAL')
     total = db.execute('SELECT COUNT(*) FROM pages').fetchone()[0]
     unique = db.execute(
         "SELECT COUNT(DISTINCT substr(url, 8, instr(substr(url, 8), '/')-1+7)) FROM pages"
@@ -156,6 +158,7 @@ def check_for_changes(tier: int = None, min_content_length: int = 200) -> list[d
     from bs4 import BeautifulSoup
 
     db = sqlite3.connect(str(DB_PATH))
+    db.execute('PRAGMA journal_mode=WAL')
     db.row_factory = sqlite3.Row
 
     tiers_to_check = [tier] if tier else [1, 2, 3]
@@ -345,6 +348,7 @@ def classify_page(title: str, body: str) -> list[str]:
 def get_by_category(category: str, limit: int = 50) -> list[dict]:
     """Get pages by category. Requires categories to have been stored during indexing."""
     db = sqlite3.connect(str(DB_PATH))
+    db.execute('PRAGMA journal_mode=WAL')
     db.row_factory = sqlite3.Row
     # Check if categories column exists
     cols = [c[1] for c in db.execute('PRAGMA table_info(pages)').fetchall()]

@@ -3,6 +3,7 @@
 # Checks every 60 seconds. If dead, restarts. If stuck, kills + restarts.
 
 DB="/mnt/darkweb/index.db"
+WAL="/mnt/darkweb/index.db-wal"
 LOG="/mnt/darkweb/logs/crawler_watchdog.log"
 CRAWLER_LOG="/mnt/darkweb/logs/crawler.log"
 LOCK="/tmp/darksearch_crawler.lock"
@@ -22,16 +23,25 @@ fi
 # Check if crawler is stuck: DB unchanged for >15 minutes, AND no log activity for >10 min
 if [ -f "$DB" ]; then
     DB_AGE=$(stat -c %Y "$DB" 2>/dev/null)
+    # Also check WAL file (WAL mode defers DB writes until checkpoint)
+    WAL_AGE=$(stat -c %Y "$WAL" 2>/dev/null || echo 0)
     NOW=$(date +%s)
     DB_STALE=$((NOW - DB_AGE))
-    
-    if [ "$DB_STALE" -gt 900 ]; then
+    WAL_STALE=$((NOW - WAL_AGE))
+    # Use the fresher of the two to determine staleness
+    if [ "$WAL_STALE" -lt "$DB_STALE" ]; then
+        FRESHEST_STALE=$WAL_STALE
+    else
+        FRESHEST_STALE=$DB_STALE
+    fi
+
+    if [ "$FRESHEST_STALE" -gt 900 ]; then
         # Also check if the crawler log has recent activity
         if [ -f "$CRAWLER_LOG" ]; then
             LOG_AGE=$(stat -c %Y "$CRAWLER_LOG" 2>/dev/null)
             LOG_STALE=$((NOW - LOG_AGE))
             if [ "$LOG_STALE" -gt 600 ]; then
-                echo "$(date): Crawler stuck (DB unchanged ${DB_STALE}s, no log ${LOG_STALE}s) — restarting" >> "$LOG"
+                echo "$(date): Crawler stuck (no DB/WAL activity ${FRESHEST_STALE}s, no log ${LOG_STALE}s) — restarting" >> "$LOG"
                 pkill -f crawler.py
                 sleep 3
                 cd /mnt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
