@@ -317,6 +317,7 @@ _BROAD_SEARCH_TERMS = [
     # Fresh broad terms — 2026-07-18
     'breached data', 'database dump', 'leaked database', 'combo list', 'email list',
     'password dump', 'login combo', 'fullz dump', 'stealer logs', 'infostealer',
+    'session cookie', 'cookie log', 'token steal', 'cookie dump', 'browser data',
     'rdp access', 'vpn logs', 'server root', 'citrix access', 'shell access',
     '.env leak', 'config file', 'aws keys', 'api keys', 'private ssh key',
     'cloned cards', 'cvv shop', 'bank logs', 'carding forum', 'paypal logs',
