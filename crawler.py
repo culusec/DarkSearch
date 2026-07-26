@@ -318,6 +318,10 @@ _BROAD_SEARCH_TERMS = [
     'breached data', 'database dump', 'leaked database', 'combo list', 'email list',
     'password dump', 'login combo', 'fullz dump', 'stealer logs', 'infostealer',
     'session cookie', 'cookie log', 'token steal', 'cookie dump', 'browser data',
+    # Discord & chat platform monitoring — 2026-07-25
+    'discord.gg', 'discord invite', 'discord server', 'discord com invite',
+    'telegram join', 'telegram invite', 't.me joinchat', 'signal group',
+    'matrix room', 'xmpp conference', 'session group', 'tox chat',
     'rdp access', 'vpn logs', 'server root', 'citrix access', 'shell access',
     '.env leak', 'config file', 'aws keys', 'api keys', 'private ssh key',
     'cloned cards', 'cvv shop', 'bank logs', 'carding forum', 'paypal logs',
