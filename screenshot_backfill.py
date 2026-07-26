@@ -9,14 +9,14 @@ Usage: python3 screenshot_backfill.py
        python3 screenshot_backfill.py --limit 50   # Do 50 at a time
        python3 screenshot_backfill.py --force       # Re-screenshot even if exists
 """
-import sqlite3
-import sys
-import time
+import sys, time
 from pathlib import Path
 from datetime import datetime
 
 BASE = Path('/mnt/darkweb')
-DB_PATH = BASE / 'index.db'
+
+sys.path.insert(0, '/mnt/threat_intel/scripts')
+from db import db_fetchall, db_fetchone, db_execute
 
 def screenshot_page(url: str, existing_file: str = None, force: bool = False) -> str | None:
     """Take a Playwright screenshot, upload to S3. Returns S3 key or None."""
@@ -77,16 +77,9 @@ def main():
     db = sqlite3.connect(str(DB_PATH))
     db.execute('PRAGMA journal_mode=WAL')
     
-    # Add screenshot column if missing
-    cols = [c[1] for c in db.execute('PRAGMA table_info(pages)').fetchall()]
-    if 'screenshot' not in cols:
-        db.execute('ALTER TABLE pages ADD COLUMN screenshot TEXT DEFAULT ""')
-        db.commit()
-        print('Added screenshot column to pages table')
-    
     # Find Tier 1 pages without screenshots
     query = """
-        SELECT url, title, categories FROM pages 
+        SELECT url, title, categories FROM darkweb_pages 
         WHERE (categories LIKE '%ransomware%' OR categories LIKE '%leak_site%')
         AND (screenshot IS NULL OR screenshot = '')
         ORDER BY crawled_at DESC
@@ -96,12 +89,12 @@ def main():
     
     if force:
         query = """
-            SELECT url, title, categories FROM pages 
+            SELECT url, title, categories FROM darkweb_pages 
             WHERE (categories LIKE '%ransomware%' OR categories LIKE '%leak_site%')
             ORDER BY crawled_at DESC
         """ + (f' LIMIT {limit}' if limit else '')
     
-    rows = db.execute(query).fetchall()
+    rows = db_fetchall(query)
     total = len(rows)
     print(f'Pages to screenshot: {total}')
     print(f'Force mode: {force}')
@@ -115,8 +108,7 @@ def main():
         
         ss = screenshot_page(url, force=force)
         if ss:
-            db.execute('UPDATE pages SET screenshot=? WHERE url=?', (ss, url))
-            db.commit()
+            db_execute('UPDATE darkweb_pages SET screenshot=%s WHERE url=%s', (ss, url))
             done += 1
             print(f'  ✅ {ss}')
         else:
@@ -126,8 +118,6 @@ def main():
         if i < total - 1:
             time.sleep(3)
     
-    db.close()
-    print()
     print(f'Done. {done} screenshots saved, {failed} failed.')
     print(f'Screenshots in: {BASE / "screenshots"}')
 

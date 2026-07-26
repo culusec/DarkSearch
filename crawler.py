@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Dark web crawler — persistent daemon that continuously crawls .onion pages via Tor.
-When queue is empty, auto-harvests seeds from OnionClaw search engines."""
+When queue is empty, auto-harvests seeds from OnionClaw search engines.
+Uses PostgreSQL on RDS (via db.py pool) — no local SQLite."""
 
-import sqlite3
 import hashlib
 import time
 import os
@@ -13,13 +13,17 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-# Add shared module and sicry
+# PostgreSQL via shared pool
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, '/home/kplat/.pi/agent/skills/onionclaw')
+sys.path.insert(0, '/mnt/threat_intel/scripts')
+from db import db_fetchall, db_fetchone, db_execute, get_pool
 from shared import classify_page, CATEGORIES
 
+# Shared connection pool
+_pool = get_pool()
+
 BASE = Path('/mnt/darkweb')
-DB_PATH = BASE / 'index.db'
 SEEDS_PATH = BASE / 'seeds.txt'
 CRAWLED_PATH = BASE / 'crawled.txt'
 QUEUE_PATH = BASE / 'queue.txt'
@@ -93,29 +97,23 @@ def is_csam(title: str, body: str, url: str = '') -> bool:
 
 
 def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.execute('PRAGMA wal_autocheckpoint=100')
-    conn.execute('''CREATE TABLE IF NOT EXISTS pages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        url TEXT UNIQUE,
-        title TEXT,
-        body TEXT,
-        snippet TEXT,
-        categories TEXT DEFAULT "",
-        crawled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.execute('CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(title, body, content=pages, content_rowid=id)')
-    cols = [c[1] for c in conn.execute('PRAGMA table_info(pages)').fetchall()]
-    if 'screenshot' not in cols:
-        conn.execute('ALTER TABLE pages ADD COLUMN screenshot TEXT DEFAULT ""')
-    conn.commit()
-    conn.execute('''CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages BEGIN
-        INSERT INTO pages_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
-    END''')
-    conn.execute('''CREATE TRIGGER IF NOT EXISTS pages_ad AFTER DELETE ON pages BEGIN
-        INSERT INTO pages_fts(pages_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
-    END''')
+    """Return a psycopg2 connection from the shared pool (RDS)."""
+    conn = _pool.getconn()
+    conn.autocommit = False
+    # Ensure schema exists (once)
+    with conn.cursor() as cur:
+        cur.execute('''CREATE TABLE IF NOT EXISTS darkweb_pages (
+            id SERIAL PRIMARY KEY,
+            url TEXT UNIQUE NOT NULL,
+            title TEXT DEFAULT '',
+            body TEXT DEFAULT '',
+            snippet TEXT DEFAULT '',
+            categories TEXT DEFAULT '',
+            screenshot TEXT DEFAULT '',
+            crawled_at TIMESTAMP DEFAULT NOW()
+        )''')
+        cur.execute("""CREATE INDEX IF NOT EXISTS idx_darkweb_pages_fts 
+            ON darkweb_pages USING gin(to_tsvector('english', coalesce(title,'') || ' ' || coalesce(body,'')))""")
     conn.commit()
     return conn
 
@@ -672,19 +670,30 @@ def main():
                 
                 categories = classify_page(title, body)
                 
-                db.execute(
-                    'INSERT OR REPLACE INTO pages (url, title, body, snippet, categories) VALUES (?, ?, ?, ?, ?)',
-                    (url, title, body, snippet, ','.join(categories))
-                )
-                db.commit()
+                conn = get_db()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            'INSERT INTO darkweb_pages (url, title, body, snippet, categories) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (url) DO UPDATE SET title=%s, body=%s, snippet=%s, categories=%s, crawled_at=NOW()',
+                            (url, title, body, snippet, ','.join(categories),
+                             title, body, snippet, ','.join(categories))
+                        )
+                    conn.commit()
+                finally:
+                    _pool.putconn(conn, close=False)
                 last_db_change = time.time()
                 
                 # Screenshot ransomware/leak_site pages
                 if SCREENSHOT_CATEGORIES & set(categories):
                     ss = screenshot_page(url)
                     if ss:
-                        db.execute('UPDATE pages SET screenshot=? WHERE url=?', (ss, url))
-                        db.commit()
+                        conn2 = get_db()
+                        try:
+                            with conn2.cursor() as cur:
+                                cur.execute('UPDATE darkweb_pages SET screenshot=%s WHERE url=%s', (ss, url))
+                            conn2.commit()
+                        finally:
+                            _pool.putconn(conn2, close=False)
                 
                 # ── Extract CVEs from page content ──
                 try:
@@ -726,8 +735,7 @@ def main():
         remaining = [u for u in queue if u not in crawled]
         QUEUE_PATH.write_text('\n'.join(remaining) + ('\n' if remaining else ''))
         
-        total_indexed = db.execute('SELECT COUNT(*) FROM pages').fetchone()[0]
-        db.close()
+        total_indexed = db_fetchone('SELECT COUNT(*) as cnt FROM darkweb_pages')['cnt']
         
         log(f'Cycle {cycle}: crawled {cycle_count}, CSAM blocked {cycle_csam}, index={total_indexed}, queue={len(remaining)}')
         

@@ -3,7 +3,8 @@
 # Checks every 60 seconds. If dead, restarts. If stuck, kills + restarts.
 
 DB="/mnt/darkweb/index.db"
-WAL="/mnt/darkweb/index.db-wal"
+# Check crawler log staleness (no SQLite file — using RDS)
+CRAWLER_LOG="/mnt/darkweb/logs/crawler.log"
 LOG="/mnt/darkweb/logs/crawler_watchdog.log"
 CRAWLER_LOG="/mnt/darkweb/logs/crawler.log"
 LOCK="/tmp/darksearch_crawler.lock"
@@ -20,32 +21,16 @@ if [ "$COUNT" -eq 0 ]; then
     exit 0
 fi
 
-# Check if crawler is stuck: DB unchanged for >15 minutes, AND no log activity for >10 min
-if [ -f "$DB" ]; then
-    DB_AGE=$(stat -c %Y "$DB" 2>/dev/null)
-    # Also check WAL file (WAL mode defers DB writes until checkpoint)
-    WAL_AGE=$(stat -c %Y "$WAL" 2>/dev/null || echo 0)
+# Check if crawler is stuck: log file unchanged for >15 minutes
+if [ -f "$CRAWLER_LOG" ]; then
+    LOG_AGE=$(stat -c %Y "$CRAWLER_LOG" 2>/dev/null)
     NOW=$(date +%s)
-    DB_STALE=$((NOW - DB_AGE))
-    WAL_STALE=$((NOW - WAL_AGE))
-    # Use the fresher of the two to determine staleness
-    if [ "$WAL_STALE" -lt "$DB_STALE" ]; then
-        FRESHEST_STALE=$WAL_STALE
-    else
-        FRESHEST_STALE=$DB_STALE
-    fi
-
-    if [ "$FRESHEST_STALE" -gt 900 ]; then
-        # Also check if the crawler log has recent activity
-        if [ -f "$CRAWLER_LOG" ]; then
-            LOG_AGE=$(stat -c %Y "$CRAWLER_LOG" 2>/dev/null)
-            LOG_STALE=$((NOW - LOG_AGE))
-            if [ "$LOG_STALE" -gt 600 ]; then
-                echo "$(date): Crawler stuck (no DB/WAL activity ${FRESHEST_STALE}s, no log ${LOG_STALE}s) — restarting" >> "$LOG"
-                pkill -f crawler.py
-                sleep 3
-                cd /mnt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
-            fi
-        fi
+    LOG_STALE=$((NOW - LOG_AGE))
+    
+    if [ "$LOG_STALE" -gt 900 ]; then
+        echo "$(date): Crawler stuck (no log activity ${LOG_STALE}s) — restarting" >> "$LOG"
+        pkill -f crawler.py
+        sleep 3
+        cd /mnt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
     fi
 fi

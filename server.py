@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Dark web search engine — Flask UI served over Tor hidden service."""
 
-import sqlite3
-import time
+import sys, time
 from collections import defaultdict
 from pathlib import Path
 from flask import Flask, request, render_template_string, abort
 
+sys.path.insert(0, '/mnt/threat_intel/scripts')
+from db import db_fetchall, db_fetchone
+
 BASE = Path('/mnt/darkweb')
-DB_PATH = BASE / 'index.db'
 
 app = Flask(__name__)
 
@@ -82,39 +83,25 @@ SEARCH_TEMPLATE = '''<!DOCTYPE html>
 </html>'''
 
 
-def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def search(query, limit=50):
-    db = get_db()
     t0 = __import__('time').time()
-    
-    # BM25-style ranking via FTS5
-    rows = db.execute('''
+    rows = db_fetchall("""
         SELECT p.url, p.title, p.snippet,
-               rank AS score
-        FROM pages_fts f
-        JOIN pages p ON p.id = f.rowid
-        WHERE pages_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?
-    ''', (query, limit)).fetchall()
-    
+               ts_rank(to_tsvector('english', coalesce(p.title,'') || ' ' || coalesce(p.body,'')),
+                       plainto_tsquery('english', %s)) AS score
+        FROM darkweb_pages p
+        WHERE to_tsvector('english', coalesce(p.title,'') || ' ' || coalesce(p.body,''))
+              @@ plainto_tsquery('english', %s)
+        ORDER BY score DESC LIMIT %s
+    """, (query, query, limit))
     elapsed = round(__import__('time').time() - t0, 3)
-    total = db.execute('SELECT COUNT(*) FROM pages').fetchone()[0]
-    db.close()
+    total = db_fetchone('SELECT COUNT(*) as cnt FROM darkweb_pages')['cnt']
     return [dict(r) for r in rows], total, elapsed
 
 
 @app.route('/')
 def index():
-    db = get_db()
-    total = db.execute('SELECT COUNT(*) FROM pages').fetchone()[0]
-    db.close()
+    total = db_fetchone('SELECT COUNT(*) as cnt FROM darkweb_pages')['cnt']
     return render_template_string(SEARCH_TEMPLATE, query='', results=[], total=total, elapsed=0)
 
 
@@ -122,9 +109,7 @@ def index():
 def search_route():
     query = request.args.get('q', '').strip()
     if not query:
-        db = get_db()
-        total = db.execute('SELECT COUNT(*) FROM pages').fetchone()[0]
-        db.close()
+        total = db_fetchone('SELECT COUNT(*) as cnt FROM darkweb_pages')['cnt']
         return render_template_string(SEARCH_TEMPLATE, query='', results=[], total=total, elapsed=0)
     
     results, total, elapsed = search(query)
