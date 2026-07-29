@@ -15,15 +15,15 @@ from bs4 import BeautifulSoup
 
 # PostgreSQL via shared pool
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, '/home/kplat/.pi/agent/skills/onionclaw')
-sys.path.insert(0, '/mnt/threat_intel/scripts')
+sys.path.insert(0, '/opt/threat_intel/scripts')
+sys.path.insert(0, '/opt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone, db_execute, get_pool
 from shared import classify_page, CATEGORIES
 
 # Shared connection pool
 _pool = get_pool()
 
-BASE = Path('/mnt/darkweb')
+BASE = Path('/opt/darkweb')
 SEEDS_PATH = BASE / 'seeds.txt'
 CRAWLED_PATH = BASE / 'crawled.txt'
 QUEUE_PATH = BASE / 'queue.txt'
@@ -440,7 +440,7 @@ def harvest_seeds(keywords: list[str] = None) -> int:
             for term in batch:
                 # Search Torch
                 try:
-                    torch_url = f'http://torchdeedp3i2jigzjdmfpn5ttjhthh5wbmda2rr3jvqjg5p77c54dqd.onion/search?query={term}'
+                    torch_url = f'http://torchsfe235y6d7wguqo6g4ucxqq7frrm5fpgkjssdhthsq4kjmmisid.onion/search?query={term}'
                     resp = session.get(torch_url, timeout=30)
                     if resp.status_code == 200:
                         links = extract_links(resp.text, torch_url)
@@ -476,12 +476,53 @@ def harvest_seeds(keywords: list[str] = None) -> int:
             session.close()
         except Exception:
             pass
-    
+
+    # Method 4: Search Dark Engine and OnionLand directly (additional sources)
+    if added == 0:
+        try:
+            session = requests.Session()
+            session.proxies = {"http": "socks5h://127.0.0.1:9050", "https": "socks5h://127.0.0.1:9050"}
+            session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:115.0) Gecko/20100101 Firefox/115.0"})
+            for term in batch:
+                # Search Dark Engine
+                try:
+                    de_url = f"http://darkent74yfc3qe7vhd2ms53ynr3l5hbjz4on2x76e7odjiyrjlirvid.onion/search?q={term}"
+                    resp = session.get(de_url, timeout=30)
+                    if resp.status_code == 200:
+                        links = extract_links(resp.text, de_url)
+                        for link in links:
+                            if link not in existing and link not in crawled:
+                                save_line(QUEUE_PATH, link)
+                                existing.add(link)
+                                crawled.add(link)
+                                added += 1
+                except Exception:
+                    pass
+                time.sleep(2)
+                # Search OnionLand
+                try:
+                    ol_url = f"http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={term}"
+                    resp = session.get(ol_url, timeout=30)
+                    if resp.status_code == 200:
+                        links = extract_links(resp.text, ol_url)
+                        for link in links:
+                            if link not in existing and link not in crawled:
+                                save_line(QUEUE_PATH, link)
+                                existing.add(link)
+                                crawled.add(link)
+                                added += 1
+                except Exception:
+                    pass
+                time.sleep(2)
+            session.close()
+        except Exception:
+            pass
+
     return added
 
 
 # ── Bridge to collect.py dump pipeline ──
-DUMP_QUEUE_PATH = Path('/mnt/threat_intel/raw/darkweb_dump_queue.jsonl')
+DUMP_QUEUE_PATH = Path('/opt/threat_intel/raw/darkweb_dump_queue.jsonl')
 DUMP_FILE_EXTS = ['.sql', '.csv', '.tsv', '.txt', '.tar.gz', '.tar', '.gz',
                   '.zip', '.rar', '.7z', '.json', '.xml', '.db', '.sqlite',
                   '.dump', '.backup', '.bak', '.bson', '.ndjson', '.xlsx', '.xls']
@@ -697,7 +738,7 @@ def main():
                 
                 # ── Extract CVEs from page content ──
                 try:
-                    sys.path.insert(0, '/mnt/threat_intel/scripts')
+                    sys.path.insert(0, '/opt/threat_intel/scripts')
                     from cve_extract import extract_and_store
                     from zeroday_extract import extract_and_store as extract_zd
                     page_text = title + ' ' + body

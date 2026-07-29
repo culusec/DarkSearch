@@ -2,9 +2,9 @@
 # DarkSearch seed harvester — uses OnionClaw to find new .onion URLs
 # Runs every 30 min via cron. Feeds the crawler queue.
 
-LOG="/mnt/darkweb/logs/seed_harvest.log"
-QUEUE="/mnt/darkweb/queue.txt"
-SICRY="/home/kplat/.pi/agent/skills/onionclaw/sicry.py"
+LOG="/opt/darkweb/logs/seed_harvest.log"
+QUEUE="/opt/darkweb/queue.txt"
+SICRY="/opt/threat_intel/scripts/sicry.py"
 
 # Rotate through 4 keyword batches based on hour
 HOUR=$(date +%H)
@@ -46,7 +46,7 @@ except: pass
 
 crawled = set()
 try:
-    with open('/mnt/darkweb/crawled.txt') as f:
+    with open('/opt/darkweb/crawled.txt') as f:
         crawled = set(l.strip() for l in f)
 except: pass
 
@@ -80,5 +80,5 @@ echo "  Total: +${TOTAL} URLs from ${HITS}/${#TERMS[@]} searches (queue: $(wc -l
 # If crawler is dead, restart it
 if ! pgrep -f "crawler.py" > /dev/null 2>&1; then
     echo "  Crawler was dead — restarting" >> "$LOG"
-    cd /mnt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
+    cd /opt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
 fi

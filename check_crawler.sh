@@ -2,11 +2,11 @@
 # DarkSearch crawler watchdog — ensures the crawler daemon stays alive
 # Checks every 60 seconds. If dead, restarts. If stuck, kills + restarts.
 
-DB="/mnt/darkweb/index.db"
+DB="/opt/darkweb/index.db"
 # Check crawler log staleness (no SQLite file — using RDS)
-CRAWLER_LOG="/mnt/darkweb/logs/crawler.log"
-LOG="/mnt/darkweb/logs/crawler_watchdog.log"
-CRAWLER_LOG="/mnt/darkweb/logs/crawler.log"
+CRAWLER_LOG="/opt/darkweb/logs/crawler.log"
+LOG="/opt/darkweb/logs/crawler_watchdog.log"
+CRAWLER_LOG="/opt/darkweb/logs/crawler.log"
 LOCK="/tmp/darksearch_crawler.lock"
 
 # Prevent overlapping watchdog instances
@@ -17,7 +17,7 @@ COUNT=$(pgrep -cf crawler.py)
 
 if [ "$COUNT" -eq 0 ]; then
     echo "$(date): Crawler daemon not running — starting" >> "$LOG"
-    cd /mnt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
+    cd /opt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
     exit 0
 fi
 
@@ -31,6 +31,6 @@ if [ -f "$CRAWLER_LOG" ]; then
         echo "$(date): Crawler stuck (no log activity ${LOG_STALE}s) — restarting" >> "$LOG"
         pkill -f crawler.py
         sleep 3
-        cd /mnt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
+        cd /opt/darkweb && nohup python3 -u crawler.py >> logs/crawler.log 2>&1 &
     fi
 fi

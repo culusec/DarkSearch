@@ -8,7 +8,7 @@ import hashlib, json, time, re
 from pathlib import Path
 from datetime import datetime
 import sys
-sys.path.insert(0, '/mnt/threat_intel/scripts')
+sys.path.insert(0, '/opt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone, db_execute
 
 QUEUE_PATH = Path('/mnt/darkweb/queue.txt')

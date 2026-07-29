@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 from flask import Flask, request, render_template_string, abort
 
-sys.path.insert(0, '/mnt/threat_intel/scripts')
+sys.path.insert(0, '/opt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone
 
 BASE = Path('/mnt/darkweb')
