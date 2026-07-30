@@ -13,7 +13,7 @@ import sys, time
 from pathlib import Path
 from datetime import datetime
 
-BASE = Path('/mnt/darkweb')
+BASE = Path('/opt/darkweb')
 
 sys.path.insert(0, '/mnt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone, db_execute

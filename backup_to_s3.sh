@@ -9,13 +9,13 @@
 #
 set -euo pipefail
 
-DB_PATH="/mnt/darkweb/index.db"
+DB_PATH="/opt/darkweb/index.db"
 S3_BUCKET="threat-intel-raw-dumps"
 S3_PREFIX="darkweb-search-engine"
 DATESTAMP=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 TMP_DIR="/tmp/darkweb_backup"
-LOG="/mnt/darkweb/logs/backup_s3.log"
+LOG="/opt/darkweb/logs/backup_s3.log"
 
 mkdir -p "$TMP_DIR" "$(dirname "$LOG")"
 

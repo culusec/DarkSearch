@@ -9,7 +9,7 @@ from flask import Flask, request, render_template_string, abort
 sys.path.insert(0, '/opt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone
 
-BASE = Path('/mnt/darkweb')
+BASE = Path('/opt/darkweb')
 
 app = Flask(__name__)
 

@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, '/opt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone, db_execute
 
-QUEUE_PATH = Path('/mnt/darkweb/queue.txt')
+QUEUE_PATH = Path('/opt/darkweb/queue.txt')
 
 # ═══════════════════════════════════════════════
 # 1. DIRECT QUERY API — threat intel queries the index
