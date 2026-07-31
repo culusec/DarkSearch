@@ -73,6 +73,15 @@ def feed_seed(url: str) -> bool:
     return True
 
 
+def feed_seeds(urls: list) -> int:
+    """Add multiple .onion URLs to the crawler queue. Returns count added."""
+    added = 0
+    for url in urls:
+        if feed_seed(url):
+            added += 1
+    return added
+
+
 # ═══════════════════════════════════════════════
 # 3. CHANGE DETECTION — tiered re-crawl for threat intel
 # ═══════════════════════════════════════════════
