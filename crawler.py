@@ -16,12 +16,8 @@ from bs4 import BeautifulSoup
 # PostgreSQL via shared pool
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, '/opt/threat_intel/scripts')
-sys.path.insert(0, '/opt/threat_intel/scripts')
-from db import db_fetchall, db_fetchone, db_execute, get_pool
+from db import db_fetchall, db_fetchone, db_execute
 from shared import classify_page, CATEGORIES
-
-# Shared connection pool
-_pool = get_pool()
 
 BASE = Path('/opt/darkweb')
 SEEDS_PATH = BASE / 'seeds.txt'
