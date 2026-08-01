@@ -1,5 +1,0 @@
-SocksPort 0
-HiddenServiceDir /mnt/darkweb/tor-data/hidden_service
-HiddenServicePort 80 127.0.0.1:8082
-DataDirectory /mnt/darkweb/tor-data
-Log notice file /mnt/darkweb/logs/tor.log

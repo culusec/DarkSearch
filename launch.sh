@@ -1,23 +1,17 @@
 #!/bin/bash
-# DarkSearch launcher — starts Tor hidden service, waits for it, then launches Flask
+# DarkSearch launcher — uses system Tor, launches Flask web UI
 set -e
-DRIVE="/mnt/darkweb"
+DRIVE="/opt/darkweb"
 
-# Kill any stale processes
-pkill -f "tor -f $DRIVE/torrc" 2>/dev/null || true
-sleep 1
+# System Tor is managed by systemd — verify it's running
+if ! systemctl is-active --quiet tor 2>/dev/null; then
+    echo "Starting system Tor..."
+    sudo systemctl start tor
+    sleep 3
+fi
 
-# Start darkweb Tor
-tor -f "$DRIVE/torrc" --pidfile "$DRIVE/tor.pid" --runasdaemon 1
-
-# Wait for hidden service hostname
-for i in $(seq 1 30); do
-    if [ -f "$DRIVE/tor-data/hidden_service/hostname" ]; then
-        echo "Tor hidden service ready: $(cat $DRIVE/tor-data/hidden_service/hostname)"
-        break
-    fi
-    sleep 2
-done
+echo "Tor SOCKS proxy: 127.0.0.1:9050 (system tor)"
 
 # Launch Flask
-exec python3 "$DRIVE/server.py"
+cd "$DRIVE"
+exec python3 server.py

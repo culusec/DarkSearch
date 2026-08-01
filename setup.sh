@@ -1,16 +1,16 @@
 #!/bin/bash
-# DarkSearch — portable setup script
-# Run this once when moving the drive to a new machine.
-# Usage: bash /mnt/darkweb/setup.sh
+# DarkSearch — EC2 setup script (no external drive)
+# Run once on a fresh instance.
+# Usage: bash /opt/darkweb/setup.sh
 
 set -e
-DRIVE="/mnt/darkweb"
+DRIVE="/opt/darkweb"
 echo "DarkSearch Setup — $(date)"
 echo "=========================="
 
-# 1. Check drive
+# 1. Check directory
 if [ ! -d "$DRIVE" ]; then
-    echo "ERROR: $DRIVE not found. Is the drive mounted?"
+    echo "ERROR: $DRIVE not found."
     exit 1
 fi
 
@@ -25,29 +25,20 @@ fi
 
 # 3. Install Python dependencies
 echo "[2/4] Installing Python packages..."
-pip3 install --break-system-packages scrapy flask requests "beautifulsoup4>=4.12" pysocks 2>/dev/null
+pip3 install --break-system-packages scrapy flask requests "beautifulsoup4>=4.12" pysocks psycopg2-binary 2>/dev/null
 
-# 4. Check Tor config
-echo "[3/4] Configuring Tor..."
-# Kill any old darkweb tor instance
-pkill -f "tor -f $DRIVE/torrc" 2>/dev/null || true
-sleep 1
+# 4. Tor config — uses system tor, not a separate instance
+echo "[3/4] Tor already configured via systemd — skipping separate tor instance"
+echo "  System Tor SOCKS proxy: 127.0.0.1:9050"
 
-# Ensure directories exist
-mkdir -p "$DRIVE/tor-data/hidden_service" "$DRIVE/logs"
+# 5. Ensure directories exist
+echo "[4/4] Creating directories..."
+mkdir -p "$DRIVE/logs"
 
-# Start Tor
-tor -f "$DRIVE/torrc" --pidfile "$DRIVE/tor.pid" --runasdaemon 1
-
-# Wait for hidden service
-echo "  Waiting for Tor hidden service..."
-for i in $(seq 1 30); do
-    if [ -f "$DRIVE/tor-data/hidden_service/hostname" ]; then
-        echo "  .onion: $(cat $DRIVE/tor-data/hidden_service/hostname)"
-        break
-    fi
-    sleep 2
-done
+echo ""
+echo "Setup complete."
+echo "Start crawler: cd $DRIVE && python3 crawler.py"
+echo "Start web UI:  cd $DRIVE && python3 server.py"
 
 # 5. Start services
 echo "[4/4] Starting DarkSearch..."

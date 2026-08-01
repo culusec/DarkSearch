@@ -15,7 +15,7 @@ from datetime import datetime
 
 BASE = Path('/opt/darkweb')
 
-sys.path.insert(0, '/mnt/threat_intel/scripts')
+sys.path.insert(0, '/opt/threat_intel/scripts')
 from db import db_fetchall, db_fetchone, db_execute
 
 def screenshot_page(url: str, existing_file: str = None, force: bool = False) -> str | None:
@@ -74,10 +74,7 @@ def main():
         if arg == '--limit' and i + 1 < len(sys.argv):
             limit = int(sys.argv[i + 1])
     
-    db = sqlite3.connect(str(DB_PATH))
-    db.execute('PRAGMA journal_mode=WAL')
-    
-    # Find Tier 1 pages without screenshots
+    # Find Tier 1 pages without screenshots (RDS via db.py pool)
     query = """
         SELECT url, title, categories FROM darkweb_pages 
         WHERE (categories LIKE '%ransomware%' OR categories LIKE '%leak_site%')
@@ -102,7 +99,10 @@ def main():
     
     done = 0
     failed = 0
-    for i, (url, title, cats) in enumerate(rows):
+    for i, row in enumerate(rows):
+        url = row['url']
+        title = row['title']
+        cats = row['categories']
         print(f'[{i+1}/{total}] {title[:60]}')
         print(f'  {url[:80]}')
         
