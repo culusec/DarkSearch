@@ -779,9 +779,16 @@ def main():
         log(f'Cycle {cycle}: crawled {cycle_count}, CSAM blocked {cycle_csam}, index={total_indexed}, queue={len(remaining)}')
         
         if cycle_count == 0 and len(remaining) == 0:
-            # All URLs exhausted — wait with cooldown, then rotate keyword pool
-            log(f'  All URLs exhausted, waiting {HARVEST_COOLDOWN}s then rotating keywords')
-            last_harvest = time.time() - HARVEST_INTERVAL + HARVEST_COOLDOWN  # trigger after cooldown
+            # Queue empty — try recrawling stale pages first
+            from shared import recrawl_stale_pages
+            recrawled = recrawl_stale_pages(days_old=14, limit=200)
+            if recrawled > 0:
+                log(f'  Queue empty — re-queued {recrawled} stale pages (>14 days old)')
+                remaining = load_lines(QUEUE_PATH)
+            else:
+                # All URLs exhausted — wait with cooldown, then rotate keyword pool
+                log(f'  All URLs exhausted, waiting {HARVEST_COOLDOWN}s then rotating keywords')
+                last_harvest = time.time() - HARVEST_INTERVAL + HARVEST_COOLDOWN  # trigger after cooldown
     
     log(f'=== Daemon stopped. Total crawled: {total_crawled}, CSAM blocked: {total_skipped_csam} ===')
 

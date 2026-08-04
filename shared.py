@@ -106,6 +106,38 @@ def get_by_category(category: str, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def recrawl_stale_pages(days_old: int = 30, limit: int = 100) -> int:
+    """Re-queue pages not crawled in N days. Returns count added."""
+    queue_path = Path('/opt/darkweb/queue.txt')
+    existing = set()
+    if queue_path.exists():
+        existing = set(l.strip() for l in queue_path.read_text().splitlines() if l.strip())
+    
+    rows = db_fetchall(
+        """SELECT url FROM darkweb_pages 
+           WHERE crawled_at < NOW() - INTERVAL '%s days'
+           ORDER BY crawled_at ASC 
+           LIMIT %s""",
+        (days_old, limit)
+    )
+    
+    added = 0
+    for r in rows:
+        url = r['url']
+        if url not in existing:
+            existing.add(url)
+            added += 1
+    
+    if added:
+        with open(queue_path, 'a') as f:
+            for r in rows:
+                url = r['url']
+                if url in existing:
+                    f.write(url + '\n')
+    
+    return added
+
+
 # ═══════════════════════════════════════════════
 # 4. CLASSIFICATION — page categorization
 # ═══════════════════════════════════════════════

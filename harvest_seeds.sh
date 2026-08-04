@@ -9,10 +9,10 @@ SICRY="/opt/threat_intel/scripts/sicry.py"
 # Rotate through 4 keyword batches based on hour
 HOUR=$(date +%H)
 case $((HOUR % 24)) in
-    0|1|2|3|4|5)   TERMS=("onion directory links 2026" "darknet market forum" "ransomware leak site onion" "initial access broker darknet" "exploit zero day sell") ;;
-    6|7|8|9|10|11)  TERMS=("darknet hosting service" "encrypted email onion" "hacking forum community" "crypto drainer script" "AI jailbreak darknet") ;;
-    12|13|14|15|16|17) TERMS=("stolen data marketplace" "botnet c2 panel onion" "carding cvv dumps forum" "bank wire fraud method" "sim swap service onion") ;;
-    18|19|20|21|22|23) TERMS=("deepfake generator onion" "cloud credential leak" "wallet cracker tool" "supply chain exploit" "ransomware affiliate program") ;;
+    0|1|2|3|4|5)   TERMS=("ransomware leak site onion 2026" "darknet market forum new" "stolen database dump onion" "initial access broker 2026" "cve exploit zero day" "new ransomware group 2026" "leaked credentials database") ;;
+    6|7|8|9|10|11)  TERMS=("darknet hosting service onion" "encrypted email provider onion" "hacking forum community 2026" "crypto drainer script new" "malware loader botnet 2026" "fresh onion links directory" "darknet marketplace 2026") ;;
+    12|13|14|15|16|17) TERMS=("stolen data marketplace 2026" "botnet c2 panel onion" "carding cvv dumps 2026" "ransomware data leak site" "hacked database for sale" "new onion service 2026" "cybercrime forum onion") ;;
+    18|19|20|21|22|23) TERMS=("cloud credential leak 2026" "wallet cracker tool new" "supply chain exploit 2026" "ransomware affiliate program" "stealer logs marketplace" "sim swapping service onion" "bank login shop onion") ;;
 esac
 
 TOTAL=0
@@ -30,7 +30,7 @@ for term in "${TERMS[@]}"; do
         fi
     fi
     
-    # Use Python + sicry to search
+    # Use Python + sicry to search (depth=30 for more fresh URLs)
     added=$(python3 -c "
 import sys, importlib.util
 spec = importlib.util.spec_from_file_location('sicry', '$SICRY')
@@ -52,7 +52,7 @@ except: pass
 
 count = 0
 try:
-    results = sicry.search('$term', max_results=10, engines=['Ahmia-clearnet', 'Tor66', 'Excavator', 'OnionLand', 'TheDeepSearches', 'Ahmia'])
+    results = sicry.search('$term', max_results=30, engines=['Ahmia-clearnet', 'Tor66', 'Excavator', 'OnionLand', 'TheDeepSearches', 'Ahmia'])
     for r in results:
         url = r.get('url', '') or r.get('link', '')
         if '.onion' in url and url not in existing and url not in crawled:
